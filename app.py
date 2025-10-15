@@ -172,9 +172,8 @@ Whether you are a data scientist, developer, or researcher, DataForge empowers y
 Ready to begin? Head over to <b>⬆️ Upload Data</b> in the sidebar to get started!
 </p>
 """, unsafe_allow_html=True)
-st.image("https://cdn-icons-png.flaticon.com/512/10850/10850814.png", width=120)
-st.success("Start by navigating to **⬆️ Upload Data** in the sidebar to begin!")
-
+  st.image("https://cdn-icons-png.flaticon.com/512/10850/10850814.png", width=120)
+  st.success("Start by navigating to **⬆️ Upload Data** in the sidebar to begin!")
 elif page == "⬆️ Upload Data":
     st.markdown('<div class="main-title">⬆️ Upload Your Dataset</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-intro">Upload your dataset in CSV, Excel, or JSON format. DataForge will securely load and prepare it for synthetic generation.</p>', unsafe_allow_html=True)
