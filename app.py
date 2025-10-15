@@ -19,13 +19,13 @@ st.set_page_config(
 st.markdown("""
 <style>
 .main-title {
-    font-size: 2.8em;
+    font-size: 3em;
     font-weight: bold;
     color: #4CAF50;
     margin-bottom: 10px;
 }
 .page-intro {
-    font-size: 1.1em;
+    font-size: 1.5em;
     color: #333333;
     margin-bottom: 25px;
 }
@@ -153,10 +153,27 @@ def generate_ctgan_data(df, num_rows, epochs=100):
 
 # --- MAIN CONTENT ---
 if page == "🏠 DataForge Home":
-    st.markdown('<div class="main-title">🧠 Welcome to DataForge</div>', unsafe_allow_html=True)
-    st.markdown('<p class="page-intro">DataForge is your intelligent data synthesization companion. Easily upload datasets, generate synthetic versions, and compare results — all with beautiful interactive visualizations.</p>', unsafe_allow_html=True)
-    st.image("https://cdn-icons-png.flaticon.com/512/1843/1843544.png", width=120)
-    st.success("Start by navigating to **⬆️ Upload Data** in the sidebar to begin!")
+    st.markdown('<div class="main-title">DataForge</div>', unsafe_allow_html=True)
+    st.markdown("""
+<div class="main-title">DataForge</div>
+<p class="page-intro">
+DataForge is a next-generation synthetic data generator and analytics platform built for privacy-first innovation.  
+Whether you are a data scientist, developer, or researcher, DataForge empowers you to:
+</p>
+
+<ul style="font-size:1.2em; line-height:1.6;">
+    <li>⚙️ <b>Generate high-quality synthetic datasets</b> using rule-based (Faker) or AI-powered (CTGAN) engines.</li>
+    <li>📤 <b>Upload real datasets securely</b> across CSV, Excel, or JSON formats.</li>
+    <li>📊 <b>Visually compare real vs synthetic data</b> through histograms and correlation heatmaps.</li>
+    <li>⬇️ <b>Export anonymized synthetic data</b> for testing, modeling, or collaboration — risk-free.</li>
+</ul>
+
+<p class="page-intro">
+Ready to begin? Head over to <b>⬆️ Upload Data</b> in the sidebar to get started!
+</p>
+""", unsafe_allow_html=True)
+st.image("https://cdn-icons-png.flaticon.com/512/10850/10850814.png", width=120)
+st.success("Start by navigating to **⬆️ Upload Data** in the sidebar to begin!")
 
 elif page == "⬆️ Upload Data":
     st.markdown('<div class="main-title">⬆️ Upload Your Dataset</div>', unsafe_allow_html=True)
