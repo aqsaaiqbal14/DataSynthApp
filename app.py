@@ -153,7 +153,7 @@ def generate_ctgan_data(df, num_rows, epochs=100):
 
 # --- MAIN CONTENT ---
 if page == "🏠 DataForge Home":
-    st.markdown('<div class="main-title">DataForge</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">Welcome to DataForge</div>', unsafe_allow_html=True)
     st.markdown("""
 <div class="main-title">DataForge</div>
 <p class="page-intro">
