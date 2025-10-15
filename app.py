@@ -114,14 +114,32 @@ def generate_faker_data(original_df, num_rows):
     return final_df[original_df.columns] if all(c in final_df.columns for c in original_df.columns) else final_df
 
 
-def generate_ctgan_data(df, num_rows, epochs=10):
+def generate_ctgan_data(df, num_rows, epochs=100):
     try:
+        from ydata_synthetic.synthesizers import ModelParameters, TrainParameters
         from ydata_synthetic.synthesizers.regular import RegularSynthesizer
-        from ydata_synthetic.synthesizers.train.ctgan import CTGANSynthesizer
-        st.warning("CTGAN placeholder running demo data. Actual training not implemented here.")
-        return generate_faker_data(df, num_rows)
-    except ImportError:
-        st.error("CTGAN not available. Falling back to Faker demo.")
+
+        # --- Define model parameters ---
+        model_args = ModelParameters(
+            batch_size=500,
+            lr=2e-4,
+            betas=(0.5, 0.9),
+            noise_dim=128,
+            layers_dim=128
+        )
+        train_args = TrainParameters(epochs=epochs)
+
+        # --- Train CTGAN ---
+        synth = RegularSynthesizer(modelname='ctgan', model_parameters=model_args)
+        synth.fit(data=df, train_arguments=train_args)
+
+        # --- Sample synthetic data ---
+        synth_data = synth.sample(num_rows)
+
+        return synth_data
+
+    except Exception as e:
+        st.error(f"CTGAN training failed: {e}. Falling back to Faker demo.")
         return generate_faker_data(df, num_rows)
 
 
@@ -161,13 +179,13 @@ elif page == "⬆️ Upload Data":
 
 elif page == "🧪 Synthesization":
     st.markdown('<div class="main-title">🧪 Generate Synthetic Data</div>', unsafe_allow_html=True)
-    st.markdown('<p class="page-intro">Choose your preferred method to generate synthetic data — either the fast Faker Demo or CTGAN (demo). Define the number of rows to generate below.</p>', unsafe_allow_html=True)
+    st.markdown('<p class="page-intro">Choose your preferred method to generate synthetic data — either the fast Faker Demo or CTGAN. Define the number of rows to generate below.</p>', unsafe_allow_html=True)
 
     if st.session_state.uploaded_data is None:
         st.warning("Please upload a dataset first.")
     else:
         df_original = st.session_state.uploaded_data
-        method = st.selectbox("Select Synthesization Method", ["Faker Demo", "CTGAN (Demo)"])
+        method = st.selectbox("Select Synthesization Method", ["Faker Demo", "CTGAN"])
         num_rows = st.slider("Rows to generate", 100, len(df_original) * 5, len(df_original), 100)
 
         if st.button("Generate Synthetic Data"):
@@ -186,7 +204,7 @@ elif page == "📊 Analysis":
     st.markdown('<div class="main-title">📊 Data Analysis & Comparison</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-intro">Compare the statistical properties of your original and synthetic datasets using interactive histograms and correlation heatmaps.</p>', unsafe_allow_html=True)
 
-    if not st.session_state.uploaded_data or not st.session_state.synthetic_data:
+    if st.session_state.uploaded_data is None or st.session_state.synthetic_data is None:
         st.warning("Please upload and generate data first.")
     else:
         df_orig, df_synth = st.session_state.uploaded_data, st.session_state.synthetic_data
@@ -214,7 +232,7 @@ elif page == "📘 User Guide":
     st.markdown('<p class="page-intro">Follow this step-by-step guide to use DataForge effectively:</p>', unsafe_allow_html=True)
     st.markdown("""
     1. **Upload** your dataset (.csv, .xlsx, or .json).  
-    2. **Generate** synthetic data using **Faker** or **CTGAN (demo)**.  
+    2. **Generate** synthetic data using **Faker** or **CTGAN**.  
     3. **Analyze** the similarity between real and synthetic data.  
     4. **Download** your synthetic dataset for future use.
     """)
@@ -235,3 +253,4 @@ elif page == "📩 Contact":
 
 st.sidebar.markdown("---")
 st.sidebar.info("Powered by DataForge — Synthetic Data Generation Platform")
+
