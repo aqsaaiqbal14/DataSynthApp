@@ -155,11 +155,10 @@ def generate_ctgan_data(df, num_rows, epochs=100):
 if page == "🏠 DataForge Home":
     st.markdown('<div class="main-title">Welcome to DataForge</div>', unsafe_allow_html=True)
     st.markdown("""
-<div class="main-title">DataForge</div>
-<p class="page-intro">
-DataForge is a next-generation synthetic data generator and analytics platform built for privacy-first innovation.  
-Whether you are a data scientist, developer, or researcher, DataForge empowers you to:
-</p>
+    <p class="page-intro">
+    DataForge is a next-generation synthetic data generator and analytics platform built for privacy-first innovation.
+    Whether you are a data scientist, developer, or researcher, DataForge empowers you to:
+    </p>
 
 <ul style="font-size:1.2em; line-height:1.6;">
     <li>⚙️ <b>Generate high-quality synthetic datasets</b> using rule-based (Faker) or AI-powered (CTGAN) engines.</li>
