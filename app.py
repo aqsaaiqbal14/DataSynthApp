@@ -7,7 +7,7 @@ import io
 import plotly.express as px
 import plotly.graph_objects as go
 from faker import Faker
-
+from scipy.stats import ks_2samp
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="DataForge: Synthetic Data Generator",
@@ -56,8 +56,10 @@ st.sidebar.title("🔍 Navigation")
 page = st.sidebar.radio("Go to", [
     "🏠 DataForge Home",
     "⬆️ Upload Data",
+    "⚙️ Pre-processing",
     "🧪 Synthesization",
     "📊 Analysis",
+    "✨ Post-processing",
     "📘 User Guide",
     "📩 Contact"
 ])
@@ -79,76 +81,122 @@ def load_data(uploaded_file):
         st.error(f"Error loading file: {e}")
         return None
 
+def preprocess_data(df, missing_threshold_pct):
+    df_clean = df.copy()
 
+    # 1. Drop columns with too many missing values
+    missing_percent = df_clean.isna().mean() * 100
+    cols_to_drop = missing_percent[missing_percent > missing_threshold_pct].index.tolist()
+    df_clean = df_clean.drop(columns=cols_to_drop, errors='ignore')
+
+    # 2. Impute remaining missing values
+    for col in df_clean.columns:
+        if df_clean[col].isna().any():
+            dtype = df_clean[col].dtype
+            if np.issubdtype(dtype, np.number):
+                # Fill numeric NaNs with the mean (if possible)
+                if df_clean[col].dropna().shape[0] > 0:
+                    df_clean[col].fillna(df_clean[col].mean(), inplace=True)
+                else:
+                    df_clean[col].fillna(0, inplace=True)
+            else:
+                # Fill categorical NaNs with the mode (most frequent value)
+                if not df_clean[col].mode().empty:
+                    df_clean[col].fillna(df_clean[col].mode()[0], inplace=True)
+                else:
+                    df_clean[col].fillna("Missing", inplace=True)
+
+    return df_clean, cols_to_drop
+
+# Faker Generation (uses processed data)
 def generate_faker_data(original_df, num_rows):
     fake = Faker()
     synthetic_data = {}
 
     for col in original_df.columns:
         dtype = original_df[col].dtype
+        col_lower = col.lower()
+
+        # Numeric columns
         if np.issubdtype(dtype, np.number):
-            min_val, max_val = original_df[col].min(), original_df[col].max()
-            low, high = min_val * 0.9 if pd.notna(min_val) else 0, max_val * 1.1 if pd.notna(max_val) else 100
-            synthetic_data[col] = (
-                np.random.randint(int(low), int(high) + 1, num_rows)
-                if np.issubdtype(dtype, np.integer)
-                else np.random.uniform(low, high, num_rows)
-            )
-        elif col.lower() in ["name", "full_name"]:
+            series = original_df[col].dropna()
+            if series.shape[0] == 0:
+                # No information — generate zeros
+                if np.issubdtype(dtype, np.integer):
+                    synthetic_data[col] = [0] * num_rows
+                else:
+                    synthetic_data[col] = [0.0] * num_rows
+                continue
+
+            min_val, max_val = series.min(), series.max()
+            # Provide sensible low/high bounds even when min==max
+            if pd.isna(min_val) or pd.isna(max_val):
+                low, high = 0, 100
+            else:
+                if min_val == max_val:
+                    # expand a small range around the single value
+                    if np.issubdtype(dtype, np.integer):
+                        low = int(min_val) - 5
+                        high = int(max_val) + 5
+                    else:
+                        low = float(min_val) - abs(float(min_val)) * 0.1 - 1
+                        high = float(max_val) + abs(float(max_val)) * 0.1 + 1
+                else:
+                    low = min_val * 0.9
+                    high = max_val * 1.1
+
+            # Ensure bounds are valid integers for randint
+            if np.issubdtype(dtype, np.integer):
+                low_i = int(np.floor(low))
+                high_i = int(np.ceil(high))
+                if low_i >= high_i:
+                    low_i = int(low_i) - 1
+                    high_i = int(high_i) + 1
+                synthetic_data[col] = list(np.random.randint(low_i, high_i + 1, size=num_rows))
+            else:
+                low_f = float(low)
+                high_f = float(high)
+                if low_f >= high_f:
+                    low_f = low_f - 1.0
+                    high_f = high_f + 1.0
+                synthetic_data[col] = list(np.random.uniform(low_f, high_f, size=num_rows))
+
+        # Common textual columns handled by Faker
+        elif col_lower in ["name", "full_name", "fullname"]:
             synthetic_data[col] = [fake.name() for _ in range(num_rows)]
-        elif col.lower() in ["email", "email_address"]:
+        elif col_lower in ["email", "email_address", "emailaddress"]:
             synthetic_data[col] = [fake.email() for _ in range(num_rows)]
-        elif col.lower() in ["job", "occupation"]:
+        elif col_lower in ["job", "occupation"]:
             synthetic_data[col] = [fake.job() for _ in range(num_rows)]
-        elif col.lower() in ["id", "user_id", "index"]:
-            synthetic_data[col] = range(1, num_rows + 1)
+        elif col_lower in ["id", "user_id", "index"]:
+            synthetic_data[col] = list(range(1, num_rows + 1))
         else:
+            # For other categorical/text columns, sample from observed values if any
             unique_values = original_df[col].dropna().unique()
-            synthetic_data[col] = (
-                np.random.choice(unique_values, num_rows)
-                if len(unique_values) > 0
-                else [f"Synthetic_{i}" for i in range(num_rows)]
-            )
+            if len(unique_values) > 0:
+                synthetic_data[col] = list(np.random.choice(unique_values, size=num_rows, replace=True))
+            else:
+                synthetic_data[col] = [f"Synthetic_{i}" for i in range(1, num_rows + 1)]
 
     final_df = pd.DataFrame(synthetic_data)
-    return final_df[original_df.columns] if all(c in final_df.columns for c in original_df.columns) else final_df
 
-
-def generate_ctgan_data(df, num_rows, epochs=100):
+    # Reorder columns to match original if possible
     try:
-        from ydata_synthetic.synthesizers import ModelParameters, TrainParameters
-        from ydata_synthetic.synthesizers.regular import RegularSynthesizer
+        final_df = final_df[original_df.columns]
+    except Exception:
+        pass
+    return final_df
 
-        # --- Identify numeric and categorical columns ---
-        num_cols = list(df.select_dtypes(include=[np.number]).columns)
-        cat_cols = [c for c in df.columns if c not in num_cols]
 
-        if not num_cols and not cat_cols:
-            st.error("No valid columns found for CTGAN training. Falling back to Faker demo.")
-            return generate_faker_data(df, num_rows)
-
-        # --- Define model parameters ---
-        model_args = ModelParameters(
-            batch_size=500,
-            lr=2e-4,
-            betas=(0.5, 0.9),
-            noise_dim=128,
-            layers_dim=128
-        )
-        train_args = TrainParameters(epochs=epochs)
-
-        # --- Train CTGAN ---
-        synth = RegularSynthesizer(modelname='ctgan', model_parameters=model_args)
-        synth.fit(data=df, train_arguments=train_args, num_cols=num_cols, cat_cols=cat_cols)
-
-        # --- Sample synthetic data ---
-        synth_data = synth.sample(num_rows)
-
-        return synth_data
-
-    except Exception as e:
-        st.error(f"CTGAN training failed: {e}. Falling back to Faker demo.")
+def generate_ctgan_data(df, num_rows, epochs=10):
+    try:
+        # Placeholder logic
+        st.warning("CTGAN placeholder running demo data. Actual CTGAN training not implemented here.")
         return generate_faker_data(df, num_rows)
+    except Exception:
+        st.error("CTGAN not available. Falling back to Faker demo.")
+        return generate_faker_data(df, num_rows)
+
 
 
 # --- MAIN CONTENT ---
