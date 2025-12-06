@@ -4,4 +4,6 @@ numpy
 plotly
 openpyxl
 faker
+
 ydata-synthetic
+scipy
