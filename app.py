@@ -199,6 +199,52 @@ elif page == "⬆️ Upload Data":
             col3.metric("Numeric Columns", len(df.select_dtypes(include=np.number).columns))
     else:
         st.info("Please upload a dataset to start.")
+        
+# --- NEW PRE-PROCESSING PAGE ---
+elif page == "⚙️ Pre-processing":
+    st.markdown('<div class="main-title">⚙️ Data Pre-processing (Cleaning)</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-intro">Clean and prepare your uploaded dataset. This step handles missing values and drops overly sparse columns before synthesis.</p>', unsafe_allow_html=True)
+
+    if st.session_state.uploaded_data is None:
+        st.warning("Please upload a dataset first in the **⬆️ Upload Data** section.")
+    else:
+        df_orig = st.session_state.uploaded_data
+        st.subheader("Missing Value Summary (Original Data)")
+        missing_summary = pd.DataFrame({
+            "Missing Count": df_orig.isna().sum(),
+            "Missing %": (df_orig.isna().mean() * 100).round(2)
+        }).sort_values(by="Missing %", ascending=False)
+
+        if missing_summary["Missing Count"].sum() > 0:
+            st.dataframe(missing_summary[missing_summary["Missing Count"] > 0], use_container_width=True)
+        else:
+            st.info("No missing values found in the uploaded data!")
+
+        # User control for dropping columns
+        threshold = st.slider(
+            "Column Drop Threshold (% Missing)",
+            min_value=5, max_value=100, value=20, step=5,
+            help="Columns with a missing percentage higher than this value will be dropped. Remaining NaNs will be filled (mean/mode)."
+        )
+
+        if st.button("Apply Pre-processing (Clean Data)"):
+            df_clean, dropped_cols = preprocess_data(df_orig, threshold)
+            st.session_state.processed_data = df_clean
+
+            if dropped_cols:
+                st.warning(f"Dropped {len(dropped_cols)} column(s): {', '.join(dropped_cols)}")
+
+            st.success("Data cleaned and ready for synthesis! Proceed to **🧪 Synthesization**.")
+            st.subheader("Processed Data Preview")
+            st.dataframe(df_clean.head())
+            mc1, mc2 = st.columns(2)
+            mc1.metric("Final Columns", len(df_clean.columns))
+            mc2.metric("Remaining Missing Cells", int(df_clean.isna().sum().sum()))
+        else:
+            if st.session_state.processed_data is None:
+                st.info("Click 'Apply Pre-processing' to clean the data.")
+            else:
+                st.success("Data is already processed. Proceed to **🧪 Synthesization**.")
 
 elif page == "🧪 Synthesization":
     st.markdown('<div class="main-title">🧪 Generate Synthetic Data</div>', unsafe_allow_html=True)
@@ -249,7 +295,69 @@ elif page == "📊 Analysis":
             c2.plotly_chart(go.Figure(data=go.Heatmap(z=corr_synth, x=corr_synth.columns, y=corr_synth.index, colorscale="Reds")), use_container_width=True)
         else:
             st.info("No common numeric columns found.")
+            
+# --- NEW POST-PROCESSING PAGE ---
+elif page == "✨ Post-processing":
+    st.markdown('<div class="main-title">✨ Post-processing (Quantitative Validation)</div>', unsafe_allow_html=True)
+    st.markdown('<p class="page-intro">Perform quantitative metrics to assess how well the synthetic data preserves the statistical properties of the original data.</p>', unsafe_allow_html=True)
 
+    if st.session_state.processed_data is None or st.session_state.synthetic_data is None:
+        st.warning("Please upload, process, and generate data first.")
+    else:
+        df_orig, df_synth = st.session_state.processed_data, st.session_state.synthetic_data
+
+        # Identify common numeric columns
+        numeric_cols_orig = df_orig.select_dtypes(include=np.number).columns
+        numeric_cols_synth = df_synth.select_dtypes(include=np.number).columns
+        common_numeric = list(set(numeric_cols_orig) & set(numeric_cols_synth))
+
+        if common_numeric:
+            st.subheader("Kolmogorov-Smirnov (KS) Test for Distribution Similarity")
+            st.markdown("""
+            The **KS Statistic** measures the maximum distance between the cumulative distributions of the original and synthetic data.
+            A value closer to **0** indicates a better match in distribution.
+            """)
+
+            ks_results = []
+            for col in common_numeric:
+                # KS test is only reliable on continuous numerical data
+                try:
+                    orig_vals = df_orig[col].dropna()
+                    synth_vals = df_synth[col].dropna()
+                    if orig_vals.shape[0] < 2 or synth_vals.shape[0] < 2:
+                        raise ValueError("Too few data points")
+                    ks_stat, p_val = ks_2samp(orig_vals, synth_vals)
+                    ks_results.append({
+                        "Column": col,
+                        "KS Statistic": float(ks_stat),
+                        "P-Value": float(p_val)
+                    })
+                except Exception:
+                    ks_results.append({
+                        "Column": col,
+                        "KS Statistic": None,
+                        "P-Value": None
+                    })
+
+            ks_df = pd.DataFrame(ks_results)
+            # Format for display
+            display_df = ks_df.copy()
+            display_df["KS Statistic"] = display_df["KS Statistic"].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "N/A")
+            display_df["P-Value"] = display_df["P-Value"].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "N/A")
+            st.dataframe(display_df, use_container_width=True)
+
+            # Display a summary based on KS scores
+            avg_ks = ks_df["KS Statistic"].dropna().mean()
+            if pd.notna(avg_ks):
+                if avg_ks < 0.15:
+                    st.success(f"Average KS Statistic: {avg_ks:.3f}. Excellent distributional match!")
+                elif avg_ks < 0.30:
+                    st.warning(f"Average KS Statistic: {avg_ks:.3f}. Good match, but some variance exists.")
+                else:
+                    st.error(f"Average KS Statistic: {avg_ks:.3f}. The distributions differ significantly.")
+        else:
+            st.info("No common numeric columns found to run the KS test.")
+            
 elif page == "📘 User Guide":
     st.markdown('<div class="main-title">📘 User Guide</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-intro">Follow this step-by-step guide to use DataForge effectively:</p>', unsafe_allow_html=True)
