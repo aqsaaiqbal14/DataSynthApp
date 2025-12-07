@@ -344,17 +344,18 @@ elif page == "📊 Analysis":
         else:
             st.info("No common numeric columns found.")
             
-# --- NEW POST-PROCESSING PAGE ---
 elif page == "✨ Post-processing":
     st.markdown('<div class="main-title">✨ Post-processing (Quantitative Validation)</div>', unsafe_allow_html=True)
     st.markdown('<p class="page-intro">Perform quantitative metrics to assess how well the synthetic data preserves the statistical properties of the original data.</p>', unsafe_allow_html=True)
 
+    # Ensure data exists
     if st.session_state.processed_data is None or st.session_state.synthetic_data is None:
         st.warning("Please upload, process, and generate data first.")
     else:
-        df_orig, df_synth = st.session_state.processed_data, st.session_state.synthetic_data
+        df_orig = st.session_state.processed_data
+        df_synth = st.session_state.synthetic_data
 
-        # Identify common numeric columns
+        # Identify numeric columns common to both datasets
         numeric_cols_orig = df_orig.select_dtypes(include=np.number).columns
         numeric_cols_synth = df_synth.select_dtypes(include=np.number).columns
         common_numeric = list(set(numeric_cols_orig) & set(numeric_cols_synth))
@@ -362,19 +363,39 @@ elif page == "✨ Post-processing":
         if common_numeric:
             st.subheader("Kolmogorov-Smirnov (KS) Test for Distribution Similarity")
             st.markdown("""
-            The **KS Statistic** measures the maximum distance between the cumulative distributions of the original and synthetic data.
-            A value closer to **0** indicates a better match in distribution.
+            The **KS Statistic** measures the maximum distance between the cumulative distributions
+            of the original and synthetic data.  
+            - A value **close to 0** means high similarity.  
+            - A value **> 0.30** suggests the synthetic data does not match well.
             """)
 
             ks_results = []
+
             for col in common_numeric:
-                # KS test is only reliable on continuous numerical data
                 try:
                     orig_vals = df_orig[col].dropna()
                     synth_vals = df_synth[col].dropna()
-                    if orig_vals.shape[0] < 2 or synth_vals.shape[0] < 2:
-                        raise ValueError("Too few data points")
+
+                    # Skip columns with too few unique values (categorical numbers)
+                    if orig_vals.nunique() < 5 or synth_vals.nunique() < 5:
+                        ks_results.append({
+                            "Column": col,
+                            "KS Statistic": None,
+                            "P-Value": None
+                        })
+                        continue
+
+                    # Skip if sample sizes are too small
+                    if len(orig_vals) < 2 or len(synth_vals) < 2:
+                        ks_results.append({
+                            "Column": col,
+                            "KS Statistic": None,
+                            "P-Value": None
+                        })
+                        continue
+
                     ks_stat, p_val = ks_2samp(orig_vals, synth_vals)
+
                     ks_results.append({
                         "Column": col,
                         "KS Statistic": float(ks_stat),
@@ -388,23 +409,33 @@ elif page == "✨ Post-processing":
                     })
 
             ks_df = pd.DataFrame(ks_results)
+
             # Format for display
             display_df = ks_df.copy()
-            display_df["KS Statistic"] = display_df["KS Statistic"].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "N/A")
-            display_df["P-Value"] = display_df["P-Value"].apply(lambda x: f"{x:.4f}" if pd.notna(x) else "N/A")
+            display_df["KS Statistic"] = display_df["KS Statistic"].apply(
+                lambda x: f"{x:.4f}" if pd.notna(x) else "N/A")
+            display_df["P-Value"] = display_df["P-Value"].apply(
+                lambda x: f"{x:.4f}" if pd.notna(x) else "N/A")
+
             st.dataframe(display_df, use_container_width=True)
 
-            # Display a summary based on KS scores
-            avg_ks = ks_df["KS Statistic"].dropna().mean()
-            if pd.notna(avg_ks):
+            # Calculate average KS Statistic
+            valid_ks = ks_df["KS Statistic"].dropna()
+
+            if len(valid_ks) == 0:
+                st.info("Not enough continuous numeric columns to summarize KS statistics.")
+            else:
+                avg_ks = valid_ks.mean()
+
                 if avg_ks < 0.15:
                     st.success(f"Average KS Statistic: {avg_ks:.3f}. Excellent distributional match!")
                 elif avg_ks < 0.30:
-                    st.warning(f"Average KS Statistic: {avg_ks:.3f}. Good match, but some variance exists.")
+                    st.warning(f"Average KS Statistic: {avg_ks:.3f}. Good match with minor variance.")
                 else:
                     st.error(f"Average KS Statistic: {avg_ks:.3f}. The distributions differ significantly.")
         else:
             st.info("No common numeric columns found to run the KS test.")
+
             
 elif page == "📘 User Guide":
     st.markdown('<div class="main-title">📘 User Guide</div>', unsafe_allow_html=True)
